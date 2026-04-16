@@ -1,0 +1,258 @@
+openapi: 3.0.3
+info:
+  title: VAT Validator Pro
+  version: 1.0.0
+  description: >-
+    Real-time VAT number validation for EU (VIES), UK (HMRC) and Switzerland (BFS UID).
+    Returns structured company data (name, parsed address) and an audit-compliant
+    verification ID for every successful check.
+  contact:
+    name: Arthur
+    url: https://rapidapi.com/arrijr/api/vat-validator-pro
+
+servers:
+  - url: https://vat-validator-pro.vercel.app
+    description: Production
+
+security:
+  - RapidApiKey: []
+  - RapidApiProxySecret: []
+
+tags:
+  - name: validation
+    description: VAT number validation endpoints
+  - name: system
+    description: Health & metadata
+
+paths:
+  /api/validate:
+    post:
+      tags: [validation]
+      summary: Validate a single VAT number
+      description: >-
+        Validates a VAT number against the official registry (VIES / HMRC / BFS).
+        Returns company details when available. Cached responses are served with
+        `X-Cache: HIT` header.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ValidateRequest'
+      responses:
+        '200':
+          description: Validation completed (valid or invalid — check `valid` field)
+          headers:
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+            X-Verification-Id:
+              schema: { type: string, format: uuid }
+            X-Cache:
+              schema: { type: string, enum: [HIT, MISS] }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: >-
+            Request did not come through RapidAPI proxy.
+            Error code: `FORBIDDEN`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: >-
+            Unsupported country or malformed VAT number.
+            Error codes: `UNSUPPORTED_COUNTRY`, `INVALID_VAT_FORMAT`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          description: >-
+            VIES registry temporarily unavailable. Response includes `retry_after` (seconds).
+            Error codes: `MS_MAX_CONCURRENT_REQ` (member state rate limit),
+            `GLOBAL_MAX_CONCURRENT_REQ` (VIES overloaded), `MS_UNAVAILABLE`
+            (member state registry down), `SERVICE_UNAVAILABLE` (VIES down),
+            `TIMEOUT` (upstream timeout), `IP_BLOCKED` (contact support).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/validate/batch:
+    post:
+      tags: [validation]
+      summary: Validate up to 100 VAT numbers in one request
+      description: >-
+        Batch validation. Returns an array of results in the same order as input.
+        Individual failures don't fail the whole batch — each result has its own status.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vat_numbers]
+              properties:
+                vat_numbers:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: string
+                    example: "DE123456789"
+      responses:
+        '200':
+          description: Batch processed
+          headers:
+            X-RateLimit-Remaining:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch_id:
+                    type: string
+                    format: uuid
+                  processed_at:
+                    type: string
+                    format: date-time
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ValidationResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/health:
+    get:
+      tags: [system]
+      summary: Service health check
+      security: []
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  vies_reachable: { type: boolean }
+                  hmrc_reachable: { type: boolean }
+                  timestamp: { type: string, format: date-time }
+
+components:
+  securitySchemes:
+    RapidApiKey:
+      type: apiKey
+      in: header
+      name: X-RapidAPI-Key
+    RapidApiProxySecret:
+      type: apiKey
+      in: header
+      name: X-RapidAPI-Proxy-Secret
+      description: Injected automatically by RapidAPI gateway. Direct calls to the origin are rejected with 403.
+
+  schemas:
+    ValidateRequest:
+      type: object
+      required: [vat_number]
+      properties:
+        vat_number:
+          type: string
+          description: >-
+            VAT number with or without country prefix (e.g. `DE123456789` or `123456789`).
+            If no prefix is given, `country` must be provided.
+          example: "DE123456789"
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2 country code (optional if VAT has prefix)
+          example: "DE"
+        requester_vat:
+          type: string
+          description: >-
+            Optional: your own VAT to include in the VIES cross-check (enables higher
+            trust level — VIES returns a `request_id` that is legally binding).
+          example: "DE987654321"
+
+    ValidationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        vat_number:
+          type: string
+          example: "DE123456789"
+        country:
+          type: string
+          example: "DE"
+        company_name:
+          type: string
+          nullable: true
+          example: "Acme GmbH"
+        address:
+          type: object
+          nullable: true
+          properties:
+            street: { type: string, example: "Hauptstr. 42" }
+            city: { type: string, example: "Berlin" }
+            zip: { type: string, example: "10115" }
+            country: { type: string, example: "DE" }
+            raw: { type: string, description: "Unparsed address as returned by the registry" }
+        source:
+          type: string
+          enum: [VIES, HMRC, BFS_UID]
+        verification_id:
+          type: string
+          format: uuid
+          description: Audit-compliant ID (stored 90 days, retrievable for tax proof)
+        validated_at:
+          type: string
+          format: date-time
+        cache_hit:
+          type: boolean
+
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          example: "VIES service temporarily unavailable"
+        code:
+          type: string
+          example: "UPSTREAM_UNAVAILABLE"
+        details:
+          type: object
+          nullable: true
+        retry_after:
+          type: integer
+          nullable: true
+          description: Seconds to wait before retrying (for 503/429)
+
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
