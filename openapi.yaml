@@ -25,7 +25,7 @@ tags:
     description: Health & metadata
 
 paths:
-  /api/validate:
+  /api/v1/validate:
     post:
       tags: [validation]
       summary: Validate a single VAT number
@@ -85,7 +85,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
-  /api/validate/batch:
+  /api/v1/validate/batch:
     post:
       tags: [validation]
       summary: Validate up to 100 VAT numbers in one request

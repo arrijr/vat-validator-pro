@@ -12,7 +12,7 @@ Copy-paste ready. Paste into RapidAPI Studio → General / Settings / Documentat
 | **Category** | `Business Software` (secondary: `Finance`, `Data`) |
 | **Base URL** | `https://vat-validator-pro.vercel.app` |
 | **Health Check URL** | `https://vat-validator-pro.vercel.app/api/health` |
-| **RapidAPI Host** | `vat-validator-pro.p.rapidapi.com` |
+| **RapidAPI Host** | `eu-vat-validator-pro1.p.rapidapi.com` |
 | **Privacy URL** | `https://raw.githubusercontent.com/arrijr/vat-validator-pro/main/PRIVACY.md` |
 | **Terms URL** | `https://raw.githubusercontent.com/arrijr/vat-validator-pro/main/TERMS.md` |
 
@@ -72,16 +72,16 @@ Built for **B2B invoicing, e-commerce checkouts, accounting software, and compli
 
 ## Endpoints
 
-### POST /api/validate
+### POST /api/v1/validate
 Validate a single VAT number. Body: `{ "vat_number": "DE123456789" }` (prefix optional if `country` is provided). Optional `requester_vat` triggers the VIES cross-check and returns a legally binding `request_id`.
 
-### POST /api/validate/batch
+### POST /api/v1/validate/batch
 Validate up to 100 VAT numbers in one call. Body: `{ "vat_numbers": ["DE123456789", "FR12345678901", ...] }`. Individual failures do not fail the whole batch — each result carries its own status.
 
 ### GET /api/health
 Unguarded health check. Pings VIES + HMRC reachability. Returns `{ status: "ok", vies_reachable: true, hmrc_reachable: true, timestamp: ... }`.
 
-## Response format (example — `/api/validate`)
+## Response format (example — `/api/v1/validate`)
 
 ```json
 {
@@ -123,7 +123,7 @@ Unguarded health check. Pings VIES + HMRC reachability. Returns `{ status: "ok",
 
 **What happens when VIES is down?** The API returns a 503 with a deterministic error code (`MS_UNAVAILABLE`, `GLOBAL_MAX_CONCURRENT_REQ`, `SERVICE_UNAVAILABLE`, `TIMEOUT`, etc.) plus `retry_after`. Cached results continue to serve with `X-Cache: HIT`.
 
-**Can I validate a list of VAT numbers in one call?** Yes — `POST /api/validate/batch` accepts up to 100 numbers per request.
+**Can I validate a list of VAT numbers in one call?** Yes — `POST /api/v1/validate/batch` accepts up to 100 numbers per request.
 
 **Does this give me tax or legal advice?** No. It returns a data service querying official registries. Use it as evidence, not as advice.
 
@@ -142,12 +142,12 @@ VAT Validator Pro queries official registries operated by third-party authoritie
 
 **JavaScript**
 ```javascript
-const res = await fetch('https://vat-validator-pro.p.rapidapi.com/api/validate', {
+const res = await fetch('https://eu-vat-validator-pro1.p.rapidapi.com/api/v1/validate', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
     'X-RapidAPI-Key': 'YOUR_RAPIDAPI_KEY',
-    'X-RapidAPI-Host': 'vat-validator-pro.p.rapidapi.com'
+    'X-RapidAPI-Host': 'eu-vat-validator-pro1.p.rapidapi.com'
   },
   body: JSON.stringify({ vat_number: 'DE123456789' })
 });
@@ -159,11 +159,11 @@ console.log(data.valid, data.company_name, data.verification_id);
 ```python
 import requests
 res = requests.post(
-    'https://vat-validator-pro.p.rapidapi.com/api/validate',
+    'https://eu-vat-validator-pro1.p.rapidapi.com/api/v1/validate',
     json={'vat_number': 'DE123456789'},
     headers={
         'X-RapidAPI-Key': 'YOUR_RAPIDAPI_KEY',
-        'X-RapidAPI-Host': 'vat-validator-pro.p.rapidapi.com',
+        'X-RapidAPI-Host': 'eu-vat-validator-pro1.p.rapidapi.com',
     },
 )
 data = res.json()
@@ -172,10 +172,10 @@ print(data['valid'], data.get('company_name'), data['verification_id'])
 
 **cURL**
 ```bash
-curl -X POST "https://vat-validator-pro.p.rapidapi.com/api/validate" \
+curl -X POST "https://eu-vat-validator-pro1.p.rapidapi.com/api/v1/validate" \
   -H "Content-Type: application/json" \
   -H "X-RapidAPI-Key: YOUR_RAPIDAPI_KEY" \
-  -H "X-RapidAPI-Host: vat-validator-pro.p.rapidapi.com" \
+  -H "X-RapidAPI-Host: eu-vat-validator-pro1.p.rapidapi.com" \
   -d '{"vat_number":"DE123456789"}'
 ```
 
@@ -210,7 +210,7 @@ All plans: 60 req/min sliding-window rate limit (VIES has upstream concurrency l
 
 ### Test 2 — optional (only if adding a second test)
 
-Prefer a deterministic **format-rejection** test (POST `/api/validate` with `{"vat_number":"BAD"}` → assert `fmt.data.code == INVALID_VAT_FORMAT`) over a live VIES happy-path — VIES downtime would falsely fail a happy-path test.
+Prefer a deterministic **format-rejection** test (POST `/api/v1/validate` with `{"vat_number":"BAD"}` → assert `fmt.data.code == INVALID_VAT_FORMAT`) over a live VIES happy-path — VIES downtime would falsely fail a happy-path test.
 
 ---
 
@@ -220,4 +220,4 @@ Prefer a deterministic **format-rejection** test (POST `/api/validate` with `{"v
 2. ✅ Secret Header `X-RapidAPI-Proxy-Secret` configured
 3. ✅ Privacy + Terms URLs pasted
 4. ✅ Health test green
-5. ✅ Playground smoketest: subscribe to own API, call `/api/validate` via Try-It with a real Consumer key → expect 200 (verifies Gateway → Secret Injection → Origin chain)
+5. ✅ Playground smoketest: subscribe to own API, call `/api/v1/validate` via Try-It with a real Consumer key → expect 200 (verifies Gateway → Secret Injection → Origin chain)
